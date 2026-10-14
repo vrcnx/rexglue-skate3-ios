@@ -26,6 +26,7 @@
 // methods are render-thread-only per the interface contract (no locks
 // taken on the caches they touch).
 
+#include <rex/graphics/vulkan/persistent_pipeline_cache.h>
 #include <rex/graphics/vulkan/native_rhi_vulkan.h>
 
 #include <algorithm>
@@ -2084,8 +2085,9 @@ class NrDeviceVulkan : public nrhi::Device {
     info.renderPass = render_pass;
     info.subpass = 0;
     VkPipeline pipeline = VK_NULL_HANDLE;
-    VkResult result = dfn.vkCreateGraphicsPipelines(vulkan_device_->device(), VK_NULL_HANDLE, 1,
-                                                    &info, nullptr, &pipeline);
+    VkResult result = dfn.vkCreateGraphicsPipelines(
+        vulkan_device_->device(), GetPersistentPipelineCache(), 1, &info, nullptr, &pipeline);
+    NotePersistentPipelineCreated();
     if (result != VK_SUCCESS) {
       REXLOG_ERROR("nrhi-vulkan: vkCreateGraphicsPipelines failed ({}, vs '{}' ps '{}')",
                    int32_t(result), p.vs_entry, p.ps_entry);

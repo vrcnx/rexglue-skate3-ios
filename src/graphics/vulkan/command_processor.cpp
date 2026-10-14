@@ -29,6 +29,7 @@
 
 #include <SPIRV/GlslangToSpv.h>
 #include <glslang/Public/ShaderLang.h>
+#include <rex/graphics/vulkan/persistent_pipeline_cache.h>
 #include <rex/assert.h>
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
@@ -885,6 +886,8 @@ void VulkanCommandProcessor::InvalidateVertexBufferResidencyRange(uint32_t first
 void VulkanCommandProcessor::InitializeShaderStorage(const std::filesystem::path& cache_root,
                                                      uint32_t title_id, bool blocking) {
   CommandProcessor::InitializeShaderStorage(cache_root, title_id, blocking);
+  InitializePersistentPipelineCache(GetVulkanDevice()->device(),
+                                    cache_root / "vulkan" / "pipelines.bin");
   pipeline_cache_->InitializeShaderStorage(cache_root, title_id, blocking);
 }
 

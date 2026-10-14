@@ -54,6 +54,7 @@ set(REXGRAPHICS_VULKAN_SOURCES
     vulkan/deferred_command_buffer.cpp
     vulkan/command_processor.cpp
     vulkan/native_rhi_vulkan.cpp
+    vulkan/persistent_pipeline_cache.cpp
     vulkan/pipeline_cache.cpp
     vulkan/primitive_processor.cpp
     vulkan/render_target_cache.cpp
