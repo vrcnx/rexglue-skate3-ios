@@ -1,3 +1,12 @@
+> [!NOTE]
+> **This fork** (branch `ios-port`) adds iOS/iPadOS support for
+> [skate3recomp-ios](https://github.com/vrcnx/skate3recomp-ios): Mach-VM guest
+> memory, static MoltenVK, UIKit lifecycle, display-shaped output and a
+> persistent pipeline cache. By [CNX (@vrcnx)](https://github.com/vrcnx), built
+> with [Claude Code](https://claude.com/claude-code). Based on
+> [mchughalex/rexglue-skate3](https://github.com/mchughalex/rexglue-skate3) and
+> the [rexglue SDK](https://github.com/rexglue/rexglue-sdk).
+
 > [!CAUTION]
 > This project is in early development. Expect things to not work quite right and there to be significant changes and breaking public API updates as development progresses. Contributions and feedback are welcome, but please be aware that the codebase is still evolving rapidly.
 
