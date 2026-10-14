@@ -21,6 +21,11 @@
 #include <rex/platform.h>
 #include <rex/ui/vulkan/device.h>
 
+#if REX_PLATFORM_IOS
+// MoltenVK is linked statically on iOS (see vulkan_instance.cpp).
+extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue);
+#endif
+
 REXCVAR_DEFINE_BOOL(vulkan_require_fragment_stores_and_atomics, true, "UI/Vulkan",
                     "Deprecated and ignored for parity; fragmentStoresAndAtomics is always "
                     "required for Vulkan GPU emulation")
@@ -870,10 +875,30 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     }
   }
 
+#if REX_PLATFORM_IOS
+  // Drain every queue when the app is about to be backgrounded. Queue::Acquire
+  // (not AcquireQueue) skips the suspend gate and waits for any submission in
+  // progress on another thread.
+  VulkanDevice* raw_device = device.get();
+  device->gpu_drain_id_ = AddGpuDrainCallback([raw_device]() {
+    for (const QueueFamily& family : raw_device->queue_families()) {
+      for (const auto& queue : family.queues) {
+        Queue::Acquisition acquisition = queue->Acquire();
+        vkQueueWaitIdle(acquisition.queue());
+      }
+    }
+  });
+#endif
+
   return device;
 }
 
 VulkanDevice::~VulkanDevice() {
+#if REX_PLATFORM_IOS
+  if (gpu_drain_id_) {
+    RemoveGpuDrainCallback(gpu_drain_id_);
+  }
+#endif
   if (device_) {
     vulkan_instance_->functions().vkDestroyDevice(device_, nullptr);
   }

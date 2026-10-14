@@ -25,6 +25,17 @@
 
 REXCVAR_DEFINE_BOOL(vulkan_log_debug_messages, false, "UI/Vulkan", "Log Vulkan debug messages");
 
+#if REX_PLATFORM_IOS
+// MoltenVK is linked statically into iOS apps (there is no Vulkan loader to
+// dlopen), so its exported entry points are the loader functions.
+extern "C" {
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
+                                                               const char* pName);
+VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance instance,
+                                             const VkAllocationCallbacks* pAllocator);
+}
+#endif
+
 namespace rex {
 namespace ui {
 namespace vulkan {
@@ -33,7 +44,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
                                                        const bool try_enable_validation) {
   std::unique_ptr<VulkanInstance> vulkan_instance(new VulkanInstance());
 
-#if REX_PLATFORM_MAC
+#if REX_PLATFORM_MAC && !REX_PLATFORM_IOS
   // The Vulkan loader does not discover executable-local MoltenVK manifests by
   // default. Prefer user-provided loader settings, but make release folders run
   // without requiring VK_ICD_FILENAMES in the shell.
@@ -63,6 +74,10 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
   Functions& ifn = vulkan_instance->functions_;
 
   bool functions_loaded = true;
+#if REX_PLATFORM_IOS
+  ifn.vkGetInstanceProcAddr = ::vkGetInstanceProcAddr;
+  ifn.vkDestroyInstance = ::vkDestroyInstance;
+#else
   if (!vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader)
 #if REX_PLATFORM_MAC
       && !vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoaderFallback)
@@ -77,6 +92,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
   XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
   XE_VULKAN_LOAD_LOADER_FUNCTION(vkDestroyInstance);
 #undef XE_VULKAN_LOAD_LOADER_FUNCTION
+#endif
   if (!functions_loaded) {
     REXLOG_ERROR("Failed to get Vulkan loader function pointers");
     return nullptr;

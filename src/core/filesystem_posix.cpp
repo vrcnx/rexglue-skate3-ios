@@ -95,7 +95,21 @@ std::filesystem::path GetExecutableFolder() {
   return GetExecutablePath().parent_path();
 }
 
+#if REX_PLATFORM_IOS
+// iOS app bundles are read-only and sealed, so everything rex would keep
+// beside the executable (game/, logs, configs, dlc/) and the user data root
+// live in the app's Documents folder instead, which the Files app exposes
+// (UIFileSharingEnabled) for copying in the game and DLC.
+static std::filesystem::path GetIOSDocumentsFolder() {
+  const char* home = std::getenv("HOME");  // The app's data container.
+  return std::filesystem::path(home ? home : "") / "Documents";
+}
+#endif
+
 std::filesystem::path GetAppRootFolder() {
+#if REX_PLATFORM_IOS
+  return GetIOSDocumentsFolder();
+#endif
   auto folder = GetExecutableFolder();
 #if REX_PLATFORM_MAC
   // <root>/<name>.app/Contents/MacOS/<exe> -> <root>
@@ -111,6 +125,9 @@ std::filesystem::path GetAppRootFolder() {
 }
 
 std::filesystem::path GetUserFolder() {
+#if REX_PLATFORM_IOS
+  return GetIOSDocumentsFolder();
+#endif
   // get preferred data home
   char* home = std::getenv("XDG_DATA_HOME");
   if (home) {

@@ -28,8 +28,15 @@
 #include <TargetConditionals.h>
 #endif
 
+// REX_PLATFORM_MAC covers every Darwin target (macOS and iOS/iPadOS) since
+// they share the kernel, MoltenVK and 16 KiB pages. REX_PLATFORM_IOS narrows
+// to the sandboxed UIKit targets, where process spawning, AppKit, shm_open and
+// loose dylibs are unavailable.
 #if defined(TARGET_OS_MAC) && TARGET_OS_MAC
 #define REX_PLATFORM_MAC 1
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#define REX_PLATFORM_IOS 1
+#endif
 #elif defined(WIN32) || defined(_WIN32)
 #define REX_PLATFORM_WIN32 1
 #elif defined(__ANDROID__)
@@ -46,6 +53,9 @@
 // so they can be used in static_assert and regular expressions.
 #ifndef REX_PLATFORM_MAC
 #define REX_PLATFORM_MAC 0
+#endif
+#ifndef REX_PLATFORM_IOS
+#define REX_PLATFORM_IOS 0
 #endif
 #ifndef REX_PLATFORM_WIN32
 #define REX_PLATFORM_WIN32 0

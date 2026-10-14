@@ -1,0 +1,21 @@
+diff --git a/src/video/uikit/SDL_uikitappdelegate.m b/src/video/uikit/SDL_uikitappdelegate.m
+index 4f40d93dc..c590abe3d 100644
+--- a/src/video/uikit/SDL_uikitappdelegate.m
++++ b/src/video/uikit/SDL_uikitappdelegate.m
+@@ -365,6 +365,16 @@ - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session op
+         return;
+     }
+ 
++    // Only the app's own scene runs the program. Every connecting scene would
++    // otherwise call SDL_main again (nested, from the first one's event
++    // pump), and AirPlay / screen mirroring connects an external-display
++    // scene: the second run fails to create its window and the launch window
++    // put on the TV blanks it. Leaving that scene without windows keeps the
++    // system mirroring the device screen.
++    if (![session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
++        return;
++    }
++
+     UIWindowScene *windowScene = (UIWindowScene *)scene;
+     windowScene.delegate = self;
+ 

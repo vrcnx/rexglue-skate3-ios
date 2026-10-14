@@ -14,6 +14,8 @@
 #include <mutex>
 #include <vector>
 
+#include <rex/platform.h>
+#include <rex/ui/gpu_suspend.h>
 #include <rex/ui/vulkan/instance.h>
 
 namespace rex {
@@ -283,6 +285,10 @@ class VulkanDevice {
 
   Queue::Acquisition AcquireQueue(const uint32_t queue_family_index,
                                   const uint32_t queue_index) const {
+#if REX_PLATFORM_IOS
+    // Every vkQueueSubmit/vkQueuePresentKHR goes through here.
+    WaitForGpuSubmissionResume();
+#endif
     return queue_families()[queue_family_index].queues[queue_index]->Acquire();
   }
 
@@ -309,6 +315,9 @@ class VulkanDevice {
   Functions functions_;
 
   std::vector<QueueFamily> queue_families_;
+#if REX_PLATFORM_IOS
+  GpuDrainId gpu_drain_id_ = 0;
+#endif
   uint32_t queue_family_graphics_compute_ = UINT32_MAX;
   uint32_t queue_family_sparse_binding_ = UINT32_MAX;
 

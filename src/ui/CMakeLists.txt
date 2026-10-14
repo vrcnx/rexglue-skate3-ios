@@ -6,6 +6,7 @@ set(REXUI_CORE_SOURCES
     graphics_device_list.cpp
     graphics_upload_buffer_pool.cpp
     graphics_util.cpp
+    gpu_suspend.cpp
     imgui_dialog.cpp
     imgui_drawer.cpp
     immediate_drawer.cpp

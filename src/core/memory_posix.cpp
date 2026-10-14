@@ -43,6 +43,17 @@
 #define mmap64 mmap
 #endif
 
+// The iOS sandbox does not reliably allow POSIX shared memory, so file
+// mappings there are Mach named memory entries mapped with vm_map. Define
+// REX_MEMORY_MACH_ENTRIES=1 to exercise the same path on macOS.
+#ifndef REX_MEMORY_MACH_ENTRIES
+#define REX_MEMORY_MACH_ENTRIES REX_PLATFORM_IOS
+#endif
+#if REX_MEMORY_MACH_ENTRIES
+#include <mach/mach.h>
+#include <mach/vm_map.h>
+#endif
+
 namespace rex {
 namespace memory {
 
@@ -388,6 +399,25 @@ FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, siz
     return kFileMappingHandleInvalid;
   }
   return static_cast<FileMappingHandle>(ashmem_fd);
+#elif REX_MEMORY_MACH_ENTRIES
+  (void)path;
+  (void)commit;
+  vm_prot_t prot = VM_PROT_READ;
+  if (access == PageAccess::kReadWrite || access == PageAccess::kExecuteReadWrite) {
+    prot |= VM_PROT_WRITE;
+  }
+  // Named entries are zero-filled and lazily backed, like an unlinked shm
+  // object, so reserving the whole guest backing up front costs no memory.
+  memory_object_size_t entry_size = (length + page_size() - 1) & ~(page_size() - 1);
+  mach_port_t entry = MACH_PORT_NULL;
+  kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &entry_size, 0,
+                                               MAP_MEM_NAMED_CREATE | prot, &entry,
+                                               MACH_PORT_NULL);
+  if (kr != KERN_SUCCESS || entry == MACH_PORT_NULL) {
+    std::fprintf(stderr, "mach_make_memory_entry_64(%zu) failed: %d\n", length, kr);
+    return kFileMappingHandleInvalid;
+  }
+  return static_cast<FileMappingHandle>(entry);
 #else
   int oflag;
   switch (access) {
@@ -422,10 +452,15 @@ FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, siz
 }
 
 void CloseFileMappingHandle(FileMappingHandle handle, const std::filesystem::path& path) {
+#if REX_MEMORY_MACH_ENTRIES
+  (void)path;
+  mach_port_deallocate(mach_task_self(), static_cast<mach_port_t>(handle));
+#else
   close(static_cast<int>(handle));
 #if !REX_PLATFORM_ANDROID
   auto full_path = MakeShmName(path);
   shm_unlink(full_path.c_str());
+#endif
 #endif
 }
 
@@ -436,6 +471,38 @@ void* MapFileView(FileMappingHandle handle, void* base_address, size_t length, P
   if (file_offset % page != 0) {
     return nullptr;
   }
+
+#if REX_MEMORY_MACH_ENTRIES
+  vm_prot_t cur_prot = VM_PROT_NONE;
+  switch (access) {
+    case PageAccess::kReadOnly:
+    case PageAccess::kExecuteReadOnly:
+      cur_prot = VM_PROT_READ;
+      break;
+    case PageAccess::kReadWrite:
+    case PageAccess::kExecuteReadWrite:
+      cur_prot = VM_PROT_READ | VM_PROT_WRITE;
+      break;
+    default:
+      break;
+  }
+  // Like MAP_FIXED, a fixed view replaces the PROT_NONE reservation the
+  // caller placed there. max_protection stays read/write so later commits
+  // can mprotect the view.
+  vm_address_t address = reinterpret_cast<vm_address_t>(base_address);
+  int vm_flags = base_address ? (VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) : VM_FLAGS_ANYWHERE;
+  kern_return_t kr = vm_map(mach_task_self(), &address, length, 0, vm_flags,
+                            static_cast<mach_port_t>(handle), file_offset, FALSE, cur_prot,
+                            VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+  if (kr != KERN_SUCCESS) {
+    return nullptr;
+  }
+  if (base_address && reinterpret_cast<void*>(address) != base_address) {
+    vm_deallocate(mach_task_self(), address, length);
+    return nullptr;
+  }
+  return reinterpret_cast<void*>(address);
+#endif
 
   int flags = MAP_SHARED;
 

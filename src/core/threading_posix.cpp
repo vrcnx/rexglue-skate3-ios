@@ -1356,6 +1356,13 @@ void* PosixCondition<Thread>::ThreadStartRoutine(void* parameter) {
     assert_always();
   }
 #endif
+#if REX_PLATFORM_IOS
+  // New pthreads default to a QoS that iOS freely parks on efficiency cores
+  // and throttles first. Every runtime thread (guest threads, GPU commands,
+  // audio, pipeline compiles) is on the game's critical path, so run them at
+  // the class iOS gives the UI thread.
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
   set_current_thread_name("");
 
   auto start_data = static_cast<ThreadStartData*>(parameter);

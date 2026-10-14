@@ -1414,8 +1414,15 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
   swapchain_create_info.pNext = nullptr;
   swapchain_create_info.flags = 0;
   swapchain_create_info.surface = surface;
+#if REX_PLATFORM_IOS
+  // iOS only offers FIFO, where every queued drawable is another refresh of
+  // input latency; double buffering keeps the CPU/GPU overlap while cutting
+  // one frame of lag.
+  swapchain_create_info.minImageCount = std::max(2u, surface_capabilities.minImageCount);
+#else
   swapchain_create_info.minImageCount =
       std::max(kSubmissionCount, surface_capabilities.minImageCount);
+#endif
   if (surface_capabilities.maxImageCount) {
     swapchain_create_info.minImageCount =
         std::min(swapchain_create_info.minImageCount, surface_capabilities.maxImageCount);

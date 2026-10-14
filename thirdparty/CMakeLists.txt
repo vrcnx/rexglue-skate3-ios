@@ -252,6 +252,29 @@ set_property(TARGET freetype PROPERTY SOURCES ${_ft_sources})
 # imgui - Immediate mode GUI (no CMakeLists.txt, manual target)
 #=============================================================================
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+# Submodules pin upstream commits; rexglue's local changes to them live in
+# patches/ and are applied here once (a reverse --check detects them).
+function(rex_apply_source_patch source_dir patch_name)
+    set(_patch "${CMAKE_CURRENT_SOURCE_DIR}/patches/${patch_name}")
+    execute_process(
+        COMMAND git apply --reverse --check "${_patch}"
+        WORKING_DIRECTORY "${source_dir}"
+        RESULT_VARIABLE _already_applied
+        OUTPUT_QUIET ERROR_QUIET)
+    if(NOT _already_applied EQUAL 0)
+        execute_process(
+            COMMAND git apply "${_patch}"
+            WORKING_DIRECTORY "${source_dir}"
+            RESULT_VARIABLE _result)
+        if(NOT _result EQUAL 0)
+            message(FATAL_ERROR "Failed to apply ${patch_name} to ${source_dir}")
+        endif()
+        message(STATUS "Applied ${patch_name}")
+    endif()
+endfunction()
+
+# ImFontConfig::RasterizerGamma (light-on-dark text coverage curve).
+rex_apply_source_patch("${IMGUI_DIR}" imgui-rasterizer-gamma.patch)
 add_library(imgui OBJECT
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_demo.cpp
@@ -322,6 +345,9 @@ if(UNIX AND NOT APPLE)
     set(SDL_PIPEWIRE_SHARED   ON  CACHE BOOL "" FORCE)
 endif()
 
+# iOS: run the program only for the app scene, so AirPlay / screen mirroring
+# (an external-display scene) neither re-enters SDL_main nor blanks the TV.
+rex_apply_source_patch("${CMAKE_CURRENT_SOURCE_DIR}/sdl3" sdl3-ios-single-app-scene.patch)
 add_subdirectory(sdl3)
 
 #=============================================================================

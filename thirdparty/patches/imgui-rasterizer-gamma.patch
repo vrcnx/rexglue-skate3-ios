@@ -1,0 +1,76 @@
+diff --git a/imgui.h b/imgui.h
+index be945c611..47c8044fd 100644
+--- a/imgui.h
++++ b/imgui.h
+@@ -3539,6 +3539,7 @@ struct ImFontConfig
+     unsigned int    FontLoaderFlags;        // 0        // Settings for custom font builder. THIS IS BUILDER IMPLEMENTATION DEPENDENT. Leave as zero if unsure.
+     //unsigned int  FontBuilderFlags;       // --       // [Renamed in 1.92] Ue FontLoaderFlags.
+     float           RasterizerMultiply;     // 1.0f     // Linearly brighten (>1.0f) or darken (<1.0f) font output. Brightening small fonts may be a good workaround to make them more readable. This is a silly thing we may remove in the future.
++    float           RasterizerGamma;        // 1.0f     // Coverage gamma applied after RasterizerMultiply: alpha = alpha^gamma. <1.0f thickens light-on-dark text the way gamma-aware browser text blending does.
+     float           RasterizerDensity;      // 1.0f     // [LEGACY: this only makes sense when ImGuiBackendFlags_RendererHasTextures is not supported] DPI scale multiplier for rasterization. Not altering other font metrics: makes it easy to swap between e.g. a 100% and a 400% fonts for a zooming display, or handle Retina screen. IMPORTANT: If you change this it is expected that you increase/decrease font scale roughly to the inverse of this, otherwise quality may look lowered.
+ 
+     // [Internal]
+diff --git a/imgui_draw.cpp b/imgui_draw.cpp
+index de6462295..7cecbc5a9 100644
+--- a/imgui_draw.cpp
++++ b/imgui_draw.cpp
+@@ -2417,6 +2417,7 @@ ImFontConfig::ImFontConfig()
+     OversampleV = 0; // Auto == 1
+     GlyphMaxAdvanceX = FLT_MAX;
+     RasterizerMultiply = 1.0f;
++    RasterizerGamma = 1.0f;
+     RasterizerDensity = 1.0f;
+     EllipsisChar = 0;
+ }
+@@ -2883,6 +2884,39 @@ void ImFontAtlasTextureBlockPostProcess(ImFontAtlasPostProcessData* data)
+     // Multiply operator (legacy)
+     if (data->FontSrc->RasterizerMultiply != 1.0f)
+         ImFontAtlasTextureBlockPostProcessMultiply(data, data->FontSrc->RasterizerMultiply);
++    if (data->FontSrc->RasterizerGamma != 1.0f)
++        ImFontAtlasTextureBlockPostProcessGamma(data, data->FontSrc->RasterizerGamma);
++}
++
++void ImFontAtlasTextureBlockPostProcessGamma(ImFontAtlasPostProcessData* data, float gamma)
++{
++    unsigned char table[256];
++    for (int i = 0; i < 256; i++)
++        table[i] = (unsigned char)ImMin((int)(ImPow(i / 255.0f, gamma) * 255.0f + 0.5f), 255);
++    unsigned char* pixels = (unsigned char*)data->Pixels;
++    int pitch = data->Pitch;
++    if (data->Format == ImTextureFormat_Alpha8)
++    {
++        for (int ny = data->Height; ny > 0; ny--, pixels += pitch)
++        {
++            ImU8* p = (ImU8*)pixels;
++            for (int nx = data->Width; nx > 0; nx--, p++)
++                *p = table[*p];
++        }
++    }
++    else if (data->Format == ImTextureFormat_RGBA32) //-V547
++    {
++        for (int ny = data->Height; ny > 0; ny--, pixels += pitch)
++        {
++            ImU32* p = (ImU32*)(void*)pixels;
++            for (int nx = data->Width; nx > 0; nx--, p++)
++                *p = (*p & ~IM_COL32_A_MASK) | ((ImU32)table[(*p >> IM_COL32_A_SHIFT) & 0xFF] << IM_COL32_A_SHIFT);
++        }
++    }
++    else
++    {
++        IM_ASSERT(0);
++    }
+ }
+ 
+ void ImFontAtlasTextureBlockPostProcessMultiply(ImFontAtlasPostProcessData* data, float multiply_factor)
+diff --git a/imgui_internal.h b/imgui_internal.h
+index f577c170b..ed56407e5 100644
+--- a/imgui_internal.h
++++ b/imgui_internal.h
+@@ -3913,6 +3913,7 @@ IMGUI_API void              ImFontAtlasUpdateDrawListsSharedData(ImFontAtlas* at
+ IMGUI_API void              ImFontAtlasTextureBlockConvert(const unsigned char* src_pixels, ImTextureFormat src_fmt, int src_pitch, unsigned char* dst_pixels, ImTextureFormat dst_fmt, int dst_pitch, int w, int h);
+ IMGUI_API void              ImFontAtlasTextureBlockPostProcess(ImFontAtlasPostProcessData* data);
+ IMGUI_API void              ImFontAtlasTextureBlockPostProcessMultiply(ImFontAtlasPostProcessData* data, float multiply_factor);
++IMGUI_API void              ImFontAtlasTextureBlockPostProcessGamma(ImFontAtlasPostProcessData* data, float gamma);
+ IMGUI_API void              ImFontAtlasTextureBlockFill(ImTextureData* dst_tex, int dst_x, int dst_y, int w, int h, ImU32 col);
+ IMGUI_API void              ImFontAtlasTextureBlockCopy(ImTextureData* src_tex, int src_x, int src_y, ImTextureData* dst_tex, int dst_x, int dst_y, int w, int h);
+ IMGUI_API void              ImFontAtlasTextureBlockQueueUpload(ImFontAtlas* atlas, ImTextureData* tex, int x, int y, int w, int h);
