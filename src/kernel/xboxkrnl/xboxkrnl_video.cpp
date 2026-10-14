@@ -13,6 +13,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include <rex/cvar.h>
@@ -40,13 +41,13 @@ constexpr uint32_t kDisplayGammaType = 2;
 constexpr double kDisplayGammaPower = 2.22222233;
 constexpr double kSkate3BaseAspect = 16.0 / 9.0;
 
-// Ultrawide keeps the guest on a standard 16:9 video mode: the widening is
-// done natively (wide guest output + Hor+ projection), never by handing the
-// game a wide mode.
+// Ultrawide (and the narrower fill-display case) keeps the guest on a
+// standard 16:9 video mode: the reshaping is done natively (display-shaped
+// guest output + adjusted projection), never by handing the game the mode.
 bool Skate3UltrawideConfigured() {
-  return rex::cvar::Query<bool>("skate3_ultrawide") &&
-         rex::cvar::Query<double>("skate3_ultrawide_target_aspect") >
-             kSkate3BaseAspect + 0.01;
+  const double aspect = rex::cvar::Query<double>("skate3_ultrawide_target_aspect");
+  return rex::cvar::Query<bool>("skate3_ultrawide") && aspect > 0.0 &&
+         std::abs(aspect - kSkate3BaseAspect) > 0.01;
 }
 
 uint32_t GetConfiguredVideoModeWidth() {

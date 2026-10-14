@@ -117,7 +117,13 @@ bool IsNativeGuestOutputActive() {
 
 namespace {
 std::atomic<double> g_wide_aspect{0.0};
+std::atomic<uint64_t> g_target_size{0};  // width << 32 | height
 }  // namespace
+
+void SetNativeGuestOutputTargetSize(uint32_t width, uint32_t height) {
+  g_target_size.store(width && height ? (uint64_t(width) << 32) | height : 0,
+                      std::memory_order_relaxed);
+}
 
 void SetNativeGuestOutputWideAspect(double aspect) {
   g_wide_aspect.store(aspect > 0.0 ? aspect : 0.0, std::memory_order_relaxed);
@@ -127,7 +133,7 @@ double GetNativeGuestOutputWideAspect() {
   return g_wide_aspect.load(std::memory_order_relaxed);
 }
 
-bool ApplyNativeGuestOutputWideAspect(uint32_t& guest_output_width, uint32_t guest_output_height,
+bool ApplyNativeGuestOutputWideAspect(uint32_t& guest_output_width, uint32_t& guest_output_height,
                                       uint32_t& display_width, uint32_t& display_height) {
   const double aspect = g_wide_aspect.load(std::memory_order_relaxed);
   if (aspect <= 0.0 || !guest_output_width || !guest_output_height ||
@@ -135,14 +141,26 @@ bool ApplyNativeGuestOutputWideAspect(uint32_t& guest_output_width, uint32_t gue
       !g_native_output_active.load(std::memory_order_relaxed)) {
     return false;
   }
-  // Even width keeps every half-resolution derived target (bloom, SSAO,
+  // Even sizes keep every half-resolution derived target (bloom, SSAO,
   // menu snapshots) an exact divide.
-  uint32_t wide_width =
-      uint32_t(std::clamp(aspect * double(guest_output_height) + 0.5, 1.0, 16384.0)) & ~1u;
-  if (wide_width <= guest_output_width) {
+  auto even = [](double v) { return uint32_t(std::clamp(v + 0.5, 2.0, 16384.0)) & ~1u; };
+  uint32_t width = guest_output_width;
+  uint32_t height = guest_output_height;
+  const uint64_t target = g_target_size.load(std::memory_order_relaxed);
+  if (target) {
+    width = even(double(target >> 32));
+    height = even(double(target & 0xFFFFFFFFu));
+  } else if (aspect * double(guest_output_height) > double(guest_output_width) * 1.01) {
+    width = even(aspect * double(guest_output_height));
+  } else if (aspect * double(guest_output_height) < double(guest_output_width) * 0.99) {
+    // Narrower display (4:3 tablet): keep the width, grow the height.
+    height = even(double(guest_output_width) / aspect);
+  }
+  if (width == guest_output_width && height == guest_output_height) {
     return false;
   }
-  guest_output_width = wide_width;
+  guest_output_width = width;
+  guest_output_height = height;
   // The display aspect is the actual pixel aspect: the presenter maps the
   // wide image edge-to-edge on a matching window.
   display_width = guest_output_width;
